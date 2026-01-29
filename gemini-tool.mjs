@@ -1,8 +1,3 @@
-# 必要なパッケージのインストール
-npm install --yes @google/generative-ai
-
-# 実行用スクリプトの作成
-cat << 'EOF' > gemini-tool.mjs
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // 環境変数からAPIキーを取得
@@ -29,7 +24,3 @@ async function run(prompt) {
 // コマンドライン引数からプロンプトを受け取る
 const inputPrompt = process.argv[2] || "Hello, Gemini!";
 run(inputPrompt);
-EOF
-
-# 実行権限の付与（任意）
-chmod +x gemini-tool.mjs
