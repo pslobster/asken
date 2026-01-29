@@ -51,6 +51,7 @@ jobs:
                   # 2026年最新の Gemini 3 Flash を使用
                   model = genai.GenerativeModel('gemini-3-flash-preview')
 
+                  # プロンプトを質問内容とPRリクエストの両方に対応
                   prompt = f"""
                   あなたはシニアエンジニアです。以下の指示を解析してください。
                   指示内容: {os.environ.get('COMMENT_BODY')}
@@ -99,7 +100,10 @@ jobs:
       - name: Git Operations and Push
         if: steps.gemini.outputs.has_fix == 'true'
         id: git_push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 認証用Token
         run: |
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@[github.com/$](https://github.com/$){{ github.repository }}.git"
           BRANCH_NAME="gemini-fix-${{ github.event.issue.number }}"
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -117,7 +121,7 @@ jobs:
             git add .
             git commit -m "AI suggested changes from Issue #${{ github.event.issue.number }}"
             git push origin $BRANCH_NAME --force || { echo "::error::GitHubへのプッシュに失敗しました。"; exit 1; }
-            
+            # PRへのリンクを生成
             COMPARE_URL="${{ github.server_url }}/${{ github.repository }}/compare/main...${BRANCH_NAME}?expand=1"
             echo "pr_link=$COMPARE_URL" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
