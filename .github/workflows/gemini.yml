@@ -12,7 +12,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      workflows: write # <<<< 【最重要：追加】ワークフローファイルの作成・変更を許可
+      actions: write
 
     steps:
       - name: Checkout repository
