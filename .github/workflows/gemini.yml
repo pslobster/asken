@@ -35,7 +35,7 @@ jobs:
           import google.generativeai as genai
 
           genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-          model = genai.GenerativeModel('gemini-1.5-flash') # 2026年最新の安定版
+          model = genai.GenerativeModel('gemini-3-flash-preview') # 2026年最新の安定版
 
           prompt = f"""
           あなたはシニアエンジニアです。以下の指示に従い、リポジトリのファイルを修正するbashスクリプトを作成してください。
