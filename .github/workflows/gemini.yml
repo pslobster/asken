@@ -2,18 +2,17 @@ name: Gemini AI Partner
 
 on:
   issue_comment:
-    # 新規投稿と編集の両方に対応
     types: [created, edited]
 
 jobs:
   gemini_process:
-    # @gemini メンションがある場合のみ実行
     if: contains(github.event.comment.body, '@gemini')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
+      workflows: write # <<<< 【最重要：追加】ワークフローファイルの作成・変更を許可
 
     steps:
       - name: Checkout repository
@@ -40,6 +39,7 @@ jobs:
           import os
           import sys
           import google.generativeai as genai
+          from google.api_core import exceptions
 
           def run():
               api_key = os.environ.get("GEMINI_API_KEY")
@@ -47,43 +47,37 @@ jobs:
                   print("::error::GEMINI_API_KEY が設定されていません。")
                   sys.exit(1)
 
-              genai.configure(api_key=api_key)
-              model = genai.GenerativeModel('gemini-3-flash-preview')
-
-              prompt = f"""
-              あなたはシニアエンジニアです。以下の指示を解析してください。
-              指示内容: {os.environ.get('COMMENT_BODY')}
-              対象Issue: {os.environ.get('ISSUE_TITLE')}
-
-              [ルール]
-              - コード修正が必要なら、実行可能なbashスクリプトを ```bash ... ``` で囲って出力してください。
-              - それ以外（質問や助言）は、そのまま日本語で回答してください。
-              - 解説とスクリプトを両方出す場合は、先に解説を書いてください。
-              """
-
               try:
-                  response = model.generate_content(prompt)
-                  if not response or not response.text:
-                      print("::error::AIからの応答が空です。")
-                      sys.exit(1)
+                  genai.configure(api_key=api_key)
+                  model = genai.GenerativeModel('gemini-3-flash-preview')
+
+                  prompt = f"""
+                  あなたはシニアエンジニアです。指示を解析し、以下に従ってください。
+                  1. コード修正が必要なら ```bash ... ``` 形式のスクリプトを出力。
+                  2. 質問や助言なら、そのまま日本語で回答。
                   
+                  [重要] 
+                  - npmなどの対話型コマンドを使う場合は、必ず `--yes` や `-y` を付けて自動実行されるようにしてください（例: `npm create vite@latest . -- --template react-ts` ではなく `npm create vite@latest . --y -- --template react-ts`）。
+                  
+                  指示内容: {os.environ.get('COMMENT_BODY')}
+                  対象Issue: {os.environ.get('ISSUE_TITLE')}
+                  """
+
+                  response = model.generate_content(prompt)
                   res_text = response.text
                   
-                  # 修正スクリプトの抽出ロジックを強化
                   if "```bash" in res_text:
                       parts = res_text.split("```bash")
                       explanation = parts[0].strip()
                       script = parts[1].split("```")[0].strip()
-                      
                       with open("explanation.md", "w", encoding="utf-8") as f: f.write(explanation)
                       with open("update_code.sh", "w", encoding="utf-8") as f: f.write(script)
-                      
                       with open(os.environ['GITHUB_OUTPUT'], 'a') as f: f.write("has_fix=true\n")
                   else:
                       with open("explanation.md", "w", encoding="utf-8") as f: f.write(res_text)
                       with open(os.environ['GITHUB_OUTPUT'], 'a') as f: f.write("has_fix=false\n")
               except Exception as e:
-                  print(f"::error::Gemini API Error: {e}")
+                  print(f"::error::Python Error: {e}")
                   sys.exit(1)
           run()
           EOF
@@ -95,44 +89,37 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH_NAME="gemini-fix-${{ github.event.issue.number }}"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Gitの基本設定
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # ブランチの作成・切り替え
           git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
           
-          # AIが生成したスクリプトを実行
           chmod +x update_code.sh
-          ./update_code.sh
+          ./update_code.sh || { echo "::error::スクリプト実行失敗"; exit 1; }
           
-          # 変更があるか確認してプッシュ
           git add .
           if ! git diff --cached --exit-code; then
-            git commit -m "AI fix for issue #${{ github.event.issue.number }}"
-            # 認証を含めたURLで直接プッシュ（最も確実な方法）
-            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" "$BRANCH_NAME" --force
+            git commit -m "AI suggested changes from Issue #${{ github.event.issue.number }}"
+            # 認証付きURLでプッシュ
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" "$BRANCH_NAME" --force || { echo "::error::GitHubへのプッシュに失敗しました。"; exit 1; }
             
-            # PRリンクの作成
-            REPO_URL="${{ github.server_url }}/${{ github.repository }}"
-            echo "pr_link=${REPO_URL}/compare/main...${BRANCH_NAME}?expand=1" >> $GITHUB_OUTPUT
+            COMPARE_URL="${{ github.server_url }}/${{ github.repository }}/compare/main...${BRANCH_NAME}?expand=1"
+            echo "pr_link=$COMPARE_URL" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
-            echo "::warning::スクリプトを実行しましたがファイルに変更はありませんでした。"
+            echo "::warning::変更なし"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Post Comment to Issue
+      - name: Post Final Comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # メッセージの構築
-          echo "### 🤖 Geminiの回答" > final_comment.md
+          echo "### 🤖 Geminiからの返答" > final_comment.md
           cat explanation.md >> final_comment.md
           
           if [ "${{ steps.git_push.outputs.has_changes }}" == "true" ]; then
-            echo -e "\n\n---\n### 🛠 コード修正案が準備できました\n内容を確認し、問題なければ以下のリンクからプルリクエストを作成してください：\n[👉 プルリクエストを作成する](${{ steps.git_push.outputs.pr_link }})" >> final_comment.md
+            echo -e "\n\n---\n### 🛠 修正案を確認してください\n[👉 ここをクリックしてプルリクエストを作成](${{ steps.git_push.outputs.pr_link }})" >> final_comment.md
           fi
           
           gh issue comment ${{ github.event.issue.number }} --body-file final_comment.md
