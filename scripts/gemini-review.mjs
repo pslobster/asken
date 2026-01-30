@@ -1,11 +1,3 @@
-# スクリプトを格納するディレクトリを作成
-mkdir -p scripts
-
-# ライブラリのインストール（実行環境で必要）
-npm install --yes @google/generative-ai
-
-# レビュースクリプトの作成
-cat << 'EOF' > scripts/gemini-review.mjs
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs";
 
@@ -75,6 +67,3 @@ async function postComment(body) {
 }
 
 run();
-EOF
-
-chmod +x scripts/gemini-review.mjs
