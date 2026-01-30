@@ -1,19 +1,3 @@
-# ディレクトリの作成
-mkdir -p app/asken
-cd app/asken
-
-# Next.js プロジェクトの初期化 (App Router, TS, Tailwind CSS, ESLint を有効化)
-npx --yes create-next-app@latest . \
-  --typescript \
-  --eslint \
-  --tailwind \
-  --app \
-  --src-dir \
-  --import-alias "@/*" \
-  --use-npm
-
-# GitHub Pages 用に next.config.ts を修正 (静的エクスポート設定)
-cat <<EOF > next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -26,4 +10,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-EOF
