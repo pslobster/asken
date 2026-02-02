@@ -28,7 +28,11 @@ jobs:
         id: diff
         run: |
           # mainブランチとの差分を取得
-          git diff origin/${{ github.base_ref }}...origin/${{ github.head_ref }} > pr.diff
+          git diff origin/${{ github.base_ref }}...origin/${{ github.head_ref }} -- \
+            ':(exclude)*.lock' \
+            ':(exclude)*.json' \
+            ':(exclude)public/*' \
+            > pr.diff
 
       - name: Run Review Script
         env:
